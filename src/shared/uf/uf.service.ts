@@ -3,8 +3,12 @@ import { HttpService } from '@nestjs/axios';
 import { RedisService } from '../redis/redis.service';
 import { firstValueFrom } from 'rxjs';
 
+interface MindicadorUfResponse {
+  serie: Array<{ valor: number; fecha: string }>;
+}
+
 const UF_CACHE_KEY = 'uf:current_value';
-const UF_TTL       = 60 * 60 * 24; // 24 horas
+const UF_TTL = 60 * 60 * 24; // 24 horas
 
 @Injectable()
 export class UfService {
@@ -27,10 +31,10 @@ export class UfService {
   async refresh(): Promise<number> {
     try {
       const { data } = await firstValueFrom(
-        this.http.get('https://mindicador.cl/api/uf'),
+        this.http.get<MindicadorUfResponse>('https://mindicador.cl/api/uf'),
       );
 
-      const value: number = data.serie[0].valor;
+      const value = data.serie[0].valor;
       await this.redis.set(UF_CACHE_KEY, value.toString(), UF_TTL);
 
       this.logger.log(`UF actualizada: $${value.toLocaleString('es-CL')}`);

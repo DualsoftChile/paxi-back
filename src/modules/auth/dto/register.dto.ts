@@ -22,7 +22,9 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\+?56\d{9}$/, { message: 'Teléfono debe ser chileno: +56XXXXXXXXX' })
+  @Matches(/^\+?56\d{9}$/, {
+    message: 'Teléfono debe ser chileno: +56XXXXXXXXX',
+  })
   phone?: string;
 
   @IsOptional()

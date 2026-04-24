@@ -71,7 +71,11 @@ export class AuthService {
 
     if (!user.isActive) throw new UnauthorizedException('Cuenta desactivada');
 
-    return this.buildTokenPair({ id: user.id, email: user.email, role: user.role });
+    return this.buildTokenPair({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
   }
 
   async refresh(rawToken: string) {
@@ -81,7 +85,9 @@ export class AuthService {
 
     let payload: JwtPayload;
     try {
-      payload = this.jwt.verify<JwtPayload>(rawToken, { secret: refreshSecret });
+      payload = this.jwt.verify<JwtPayload>(rawToken, {
+        secret: refreshSecret,
+      });
     } catch {
       throw new UnauthorizedException('Refresh token inválido o expirado');
     }

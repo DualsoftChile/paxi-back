@@ -3,10 +3,10 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 // Nombres de las queues — exportar para usar en otros módulos
-export const QUEUE_NOTIFICATIONS  = 'notifications';
-export const QUEUE_SUBSCRIPTIONS  = 'subscriptions';
-export const QUEUE_UF_REFRESH     = 'uf-refresh';
-export const QUEUE_FUEL_REFRESH   = 'fuel-refresh';
+export const QUEUE_NOTIFICATIONS = 'notifications';
+export const QUEUE_SUBSCRIPTIONS = 'subscriptions';
+export const QUEUE_UF_REFRESH = 'uf-refresh';
+export const QUEUE_FUEL_REFRESH = 'fuel-refresh';
 
 @Module({
   imports: [
@@ -15,8 +15,8 @@ export const QUEUE_FUEL_REFRESH   = 'fuel-refresh';
       useFactory: (config: ConfigService) => ({
         redis: config.get<string>('REDIS_URL'),
         defaultJobOptions: {
-          removeOnComplete: 100,  // mantener los últimos 100 jobs completados
-          removeOnFail: 200,      // mantener los últimos 200 jobs fallidos para debug
+          removeOnComplete: 100, // mantener los últimos 100 jobs completados
+          removeOnFail: 200, // mantener los últimos 200 jobs fallidos para debug
         },
       }),
     }),
