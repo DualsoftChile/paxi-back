@@ -6,9 +6,15 @@ import type { AuthUser } from './interfaces/auth-user.interface';
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let service: jest.Mocked<Pick<AuthService, 'register' | 'login' | 'refresh' | 'getMe'>>;
+  let service: jest.Mocked<
+    Pick<AuthService, 'register' | 'login' | 'refresh' | 'getMe'>
+  >;
 
-  const mockTokens = { accessToken: 'access.token', refreshToken: 'refresh.token', tokenType: 'Bearer' as const };
+  const mockTokens = {
+    accessToken: 'access.token',
+    refreshToken: 'refresh.token',
+    tokenType: 'Bearer' as const,
+  };
 
   beforeEach(async () => {
     service = {
@@ -33,7 +39,7 @@ describe('AuthController', () => {
   it('register — delegates to AuthService and returns token pair', async () => {
     const dto = { email: 'new@paxi.cl', password: 'Pass1!', fullName: 'Test' };
 
-    const result = await controller.register(dto as never);
+    const result = await controller.register(dto);
 
     expect(service.register).toHaveBeenCalledWith(dto);
     expect(result).toEqual(mockTokens);
@@ -49,14 +55,20 @@ describe('AuthController', () => {
   });
 
   it('refresh — extracts refreshToken string and delegates to AuthService', async () => {
-    const result = await controller.refresh({ refreshToken: 'my.refresh.token' });
+    const result = await controller.refresh({
+      refreshToken: 'my.refresh.token',
+    });
 
     expect(service.refresh).toHaveBeenCalledWith('my.refresh.token');
     expect(result).toEqual(mockTokens);
   });
 
   it('getMe — passes user.id to AuthService and returns profile', async () => {
-    const user: AuthUser = { id: 'uuid-1', email: 'me@paxi.cl', role: UserRole.passenger };
+    const user: AuthUser = {
+      id: 'uuid-1',
+      email: 'me@paxi.cl',
+      role: UserRole.passenger,
+    };
     const profile = { ...user, fullName: 'Me', createdAt: new Date() };
     service.getMe.mockResolvedValue(profile as never);
 

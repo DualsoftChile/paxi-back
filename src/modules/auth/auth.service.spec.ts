@@ -40,11 +40,17 @@ describe('AuthService', () => {
         { provide: PrismaService, useValue: { user: userMock } },
         {
           provide: JwtService,
-          useValue: { sign: jest.fn().mockReturnValue('mock.jwt'), verify: jest.fn() },
+          useValue: {
+            sign: jest.fn().mockReturnValue('mock.jwt'),
+            verify: jest.fn(),
+          },
         },
         {
           provide: ConfigService,
-          useValue: { get: jest.fn().mockReturnValue(null), getOrThrow: jest.fn().mockReturnValue('test-secret') },
+          useValue: {
+            get: jest.fn().mockReturnValue(null),
+            getOrThrow: jest.fn().mockReturnValue('test-secret'),
+          },
         },
       ],
     }).compile();
@@ -58,11 +64,19 @@ describe('AuthService', () => {
   // ── register ────────────────────────────────────────────────
 
   describe('register', () => {
-    const dto = { email: 'new@paxi.cl', password: 'Password1!', fullName: 'Nuevo Usuario' };
+    const dto = {
+      email: 'new@paxi.cl',
+      password: 'Password1!',
+      fullName: 'Nuevo Usuario',
+    };
 
     beforeEach(() => {
       userMock.findUnique.mockResolvedValue(null);
-      userMock.create.mockResolvedValue({ id: 'uuid-new', email: dto.email, role: UserRole.passenger });
+      userMock.create.mockResolvedValue({
+        id: 'uuid-new',
+        email: dto.email,
+        role: UserRole.passenger,
+      });
       bcryptMock.hash.mockResolvedValue('$2b$12$hashed' as never);
     });
 
@@ -78,7 +92,9 @@ describe('AuthService', () => {
       await service.register(dto);
 
       expect(userMock.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ role: UserRole.passenger }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ role: UserRole.passenger }),
+        }),
       );
     });
 
@@ -87,7 +103,9 @@ describe('AuthService', () => {
 
       expect(bcryptMock.hash).toHaveBeenCalledWith(dto.password, 12);
       expect(userMock.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ passwordHash: '$2b$12$hashed' }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ passwordHash: '$2b$12$hashed' }),
+        }),
       );
     });
 
@@ -95,17 +113,19 @@ describe('AuthService', () => {
       userMock.findUnique.mockResolvedValue(dbUser);
 
       await expect(service.register(dto)).rejects.toThrow(ConflictException);
-      await expect(service.register(dto)).rejects.toThrow('Email ya registrado');
+      await expect(service.register(dto)).rejects.toThrow(
+        'Email ya registrado',
+      );
     });
 
     it('throws ConflictException when phone is already registered', async () => {
       userMock.findUnique
-        .mockResolvedValueOnce(null)     // email → free
-        .mockResolvedValueOnce(dbUser);  // phone → taken
+        .mockResolvedValueOnce(null) // email → free
+        .mockResolvedValueOnce(dbUser); // phone → taken
 
-      await expect(service.register({ ...dto, phone: '+56912345678' })).rejects.toThrow(
-        new ConflictException('Teléfono ya registrado'),
-      );
+      await expect(
+        service.register({ ...dto, phone: '+56912345678' }),
+      ).rejects.toThrow(new ConflictException('Teléfono ya registrado'));
     });
   });
 
@@ -116,7 +136,10 @@ describe('AuthService', () => {
       userMock.findUnique.mockResolvedValue(dbUser);
       bcryptMock.compare.mockResolvedValue(true as never);
 
-      const result = await service.login({ email: dbUser.email, password: 'correct' });
+      const result = await service.login({
+        email: dbUser.email,
+        password: 'correct',
+      });
 
       expect(result.accessToken).toBeDefined();
     });
@@ -124,34 +147,38 @@ describe('AuthService', () => {
     it('throws UnauthorizedException when user does not exist', async () => {
       userMock.findUnique.mockResolvedValue(null);
 
-      await expect(service.login({ email: 'ghost@paxi.cl', password: 'any' })).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.login({ email: 'ghost@paxi.cl', password: 'any' }),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('throws UnauthorizedException when password is wrong', async () => {
       userMock.findUnique.mockResolvedValue(dbUser);
       bcryptMock.compare.mockResolvedValue(false as never);
 
-      await expect(service.login({ email: dbUser.email, password: 'wrong' })).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.login({ email: dbUser.email, password: 'wrong' }),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('throws UnauthorizedException when the account is inactive', async () => {
       userMock.findUnique.mockResolvedValue({ ...dbUser, isActive: false });
       bcryptMock.compare.mockResolvedValue(true as never);
 
-      await expect(service.login({ email: dbUser.email, password: 'correct' })).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.login({ email: dbUser.email, password: 'correct' }),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 
   // ── refresh ─────────────────────────────────────────────────
 
   describe('refresh', () => {
-    const jwtPayload = { sub: dbUser.id, email: dbUser.email, role: dbUser.role };
+    const jwtPayload = {
+      sub: dbUser.id,
+      email: dbUser.email,
+      role: dbUser.role,
+    };
 
     it('issues a new token pair for a valid refresh token', async () => {
       (jwtMock.verify as jest.Mock).mockReturnValue(jwtPayload);
@@ -160,20 +187,29 @@ describe('AuthService', () => {
       const result = await service.refresh('valid.refresh.token');
 
       expect(result.accessToken).toBeDefined();
-      expect(jwtMock.verify).toHaveBeenCalledWith('valid.refresh.token', expect.any(Object));
+      expect(jwtMock.verify).toHaveBeenCalledWith(
+        'valid.refresh.token',
+        expect.any(Object),
+      );
     });
 
     it('throws UnauthorizedException for an invalid or expired token', async () => {
-      (jwtMock.verify as jest.Mock).mockImplementation(() => { throw new Error('jwt expired'); });
+      (jwtMock.verify as jest.Mock).mockImplementation(() => {
+        throw new Error('jwt expired');
+      });
 
-      await expect(service.refresh('expired.token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh('expired.token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('throws UnauthorizedException when the user account is inactive', async () => {
       (jwtMock.verify as jest.Mock).mockReturnValue(jwtPayload);
       userMock.findUnique.mockResolvedValue({ ...dbUser, isActive: false });
 
-      await expect(service.refresh('valid.token')).rejects.toThrow(UnauthorizedException);
+      await expect(service.refresh('valid.token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -182,10 +218,18 @@ describe('AuthService', () => {
   describe('getMe', () => {
     it('returns the user profile without the passwordHash field', async () => {
       const profile = {
-        id: dbUser.id, email: dbUser.email, phone: '+56911111111',
-        fullName: 'Carlos Pérez', rut: '12345678-9', role: UserRole.driver,
-        kycStatus: 'pending', avatarUrl: null, ratingAvg: '5.00',
-        ratingCount: 0, isActive: true, createdAt: new Date(),
+        id: dbUser.id,
+        email: dbUser.email,
+        phone: '+56911111111',
+        fullName: 'Carlos Pérez',
+        rut: '12345678-9',
+        role: UserRole.driver,
+        kycStatus: 'pending',
+        avatarUrl: null,
+        ratingAvg: '5.00',
+        ratingCount: 0,
+        isActive: true,
+        createdAt: new Date(),
       };
       userMock.findUniqueOrThrow.mockResolvedValue(profile);
 

@@ -20,7 +20,11 @@ describe('Auth (e2e)', () => {
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api/v1');
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
     );
     await app.init();
 
@@ -55,7 +59,11 @@ describe('Auth (e2e)', () => {
     it('returns 400 when password is shorter than 8 characters', () => {
       return request(app.getHttpServer())
         .post('/api/v1/auth/register')
-        .send({ email: `short-pw-${Date.now()}@paxi.cl`, password: '1234567', fullName: 'Short' })
+        .send({
+          email: `short-pw-${Date.now()}@paxi.cl`,
+          password: '1234567',
+          fullName: 'Short',
+        })
         .expect(400);
     });
   });
