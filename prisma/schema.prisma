@@ -91,6 +91,7 @@ model User {
   phone        String?   @unique
   fullName     String
   rut          String?   @unique
+  passwordHash String?
   role         UserRole
   kycStatus    KycStatus @default(pending)
   avatarUrl    String?
