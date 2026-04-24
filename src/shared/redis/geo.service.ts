@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { RedisService } from './redis.service';
 
+// [memberId, distance, [longitude, latitude]]
+type GeoradiusEntry = [string, string, [string, string]];
+
 const DRIVERS_GEO_KEY = 'drivers:locations';
 const DRIVER_STATUS_TTL = 35; // segundos — heartbeat cada 30s
 
@@ -27,7 +30,11 @@ export class GeoService {
     await client.geoadd(DRIVERS_GEO_KEY, longitude, latitude, driverId);
 
     // Renovar heartbeat — si no se renueva en 35s, el conductor desaparece
-    await this.redis.set(`driver:status:${driverId}`, 'available', DRIVER_STATUS_TTL);
+    await this.redis.set(
+      `driver:status:${driverId}`,
+      'available',
+      DRIVER_STATUS_TTL,
+    );
   }
 
   // Buscar conductores en radio (km) desde un punto
@@ -39,17 +46,18 @@ export class GeoService {
   ): Promise<DriverLocation[]> {
     const client = this.redis.getClient();
 
-    const results = await client.georadius(
+    const results = (await client.georadius(
       DRIVERS_GEO_KEY,
       longitude,
       latitude,
       radiusKm,
       'km',
       'ASC',
-      'COUNT', limit,
+      'COUNT',
+      limit,
       'WITHCOORD',
       'WITHDIST',
-    ) as any[];
+    )) as GeoradiusEntry[];
 
     return results.map(([driverId, distanceKm, [lon, lat]]) => ({
       driverId,

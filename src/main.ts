@@ -11,9 +11,9 @@ async function bootstrap() {
   // Validación automática de DTOs
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,       // elimina campos no declarados en el DTO
+      whitelist: true, // elimina campos no declarados en el DTO
       forbidNonWhitelisted: true,
-      transform: true,       // convierte tipos automáticamente (string → number, etc.)
+      transform: true, // convierte tipos automáticamente (string → number, etc.)
     }),
   );
 
@@ -28,4 +28,4 @@ async function bootstrap() {
   console.log(`🚕 PAXI API corriendo en puerto ${port}`);
 }
 
-bootstrap();
+void bootstrap();
