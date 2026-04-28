@@ -1,146 +1,155 @@
-name: PAXI CI/CD
+name: PAXI CI/CD Pipeline
 
 on:
   push:
-    branches: [develop, main]
+    branches: [main, develop]
   pull_request:
-    branches: [develop, main]
-
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: false
+    branches: [main, develop]
 
 env:
-  GCP_REGION: southamerica-east1
-  CLOUD_RUN_SERVICE_STAGING: paxi-api-staging
-  CLOUD_RUN_SERVICE_PRODUCTION: paxi-api
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  AR_REGION: ${{ secrets.AR_REGION }}
+  AR_REPO: ${{ secrets.AR_REPO }}
+  IMAGE: ${{ secrets.AR_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.AR_REPO }}/paxi-api
 
 jobs:
-
+  # ── Job 1: Tests ────────────────────────────────────────────────────────────
   test:
-    name: 🧪 Tests
+    name: Test
     runs-on: ubuntu-latest
     services:
       postgres:
         image: postgis/postgis:16-3.4
         env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: paxi_test
-        ports: ["5432:5432"]
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
       redis:
         image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
-    env:
-      NODE_ENV: test
-      DATABASE_URL: postgresql://test:test@localhost:5432/paxi_test
-      REDIS_URL: redis://localhost:6379
-      JWT_SECRET: test_jwt_secret_for_ci_pipeline_min32chars
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm' }
-      - run: npm ci
-      - run: npx prisma generate
-      - run: npx prisma migrate deploy
-      - run: npm run lint
-      - run: npm run test -- --coverage
-      - run: npm run test:e2e
+      - name: Checkout
+        uses: actions/checkout@v4
 
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/paxi_test
+
+      - name: Run tests
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/paxi_test
+          REDIS_URL: redis://localhost:6379/0
+          JWT_SECRET: test-secret-only-for-ci
+          NODE_ENV: test
+
+  # ── Job 2: Build & Push imagen ──────────────────────────────────────────────
   build:
-    name: 🐳 Build & Push
-    runs-on: ubuntu-latest
+    name: Build & Push
     needs: test
-    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
     outputs:
-      image: ${{ steps.image.outputs.name }}
+      image-tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
-      - id: image
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker ${{ secrets.AR_REGION }}-docker.pkg.dev --quiet
+
+      - name: Set image tag
+        id: meta
+        run: echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Build image
         run: |
-          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/paxi/paxi-api:sha-${{ github.sha }}"
-          echo "name=$IMAGE" >> $GITHUB_OUTPUT
-      - run: docker build --tag ${{ steps.image.outputs.name }} --build-arg GIT_SHA=${{ github.sha }} .
-      - run: docker push ${{ steps.image.outputs.name }}
+          docker build \
+            --tag $IMAGE:${{ github.sha }} \
+            --tag $IMAGE:latest \
+            --cache-from $IMAGE:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            .
 
+      - name: Push image
+        run: |
+          docker push $IMAGE:${{ github.sha }}
+          docker push $IMAGE:latest
+
+  # ── Job 3: Deploy Staging ───────────────────────────────────────────────────
   deploy-staging:
-    name: 🚀 Deploy → Staging
-    runs-on: ubuntu-latest
+    name: Deploy → Staging
     needs: build
+    runs-on: ubuntu-latest
+    environment: staging
     if: github.ref == 'refs/heads/develop'
-    environment:
-      name: staging
-      url: https://staging-api.paxi.cl
     steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_STAGING }}
-      - run: |
-          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE_STAGING }} \
-            --image ${{ needs.build.outputs.image }} \
-            --region ${{ env.GCP_REGION }} \
-            --platform managed \
-            --allow-unauthenticated \
-            --min-instances 0 \
-            --max-instances 5 \
-            --memory 512Mi \
-            --cpu 1 \
-            --port 3000 \
-            --set-env-vars NODE_ENV=staging \
-            --set-secrets DATABASE_URL=paxi-database-url-staging:latest \
-            --set-secrets REDIS_URL=paxi-redis-url-staging:latest \
-            --set-secrets JWT_SECRET=paxi-jwt-secret:latest
 
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: paxi-api-staging
+          region: ${{ secrets.CLOUD_RUN_REGION }}
+          image: ${{ env.IMAGE }}:${{ needs.build.outputs.image-tag }}
+
+      - name: Show staging URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.url }}"
+
+  # ── Job 4: Deploy Production ────────────────────────────────────────────────
   deploy-production:
-    name: 🚀 Deploy → Producción
-    runs-on: ubuntu-latest
+    name: Deploy → Production
     needs: build
+    runs-on: ubuntu-latest
+    environment: production # ← bloquea hasta aprobación manual
     if: github.ref == 'refs/heads/main'
-    environment:
-      name: production
-      url: https://api.paxi.cl
     steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v2
-      - run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_PRODUCTION }}
-      - run: |
-          gcloud run deploy ${{ env.CLOUD_RUN_SERVICE_PRODUCTION }} \
-            --image ${{ needs.build.outputs.image }} \
-            --region ${{ env.GCP_REGION }} \
-            --platform managed \
-            --allow-unauthenticated \
-            --min-instances 1 \
-            --max-instances 20 \
-            --memory 1Gi \
-            --cpu 2 \
-            --port 3000 \
-            --set-env-vars NODE_ENV=production \
-            --set-secrets DATABASE_URL=paxi-database-url-production:latest \
-            --set-secrets REDIS_URL=paxi-redis-url-production:latest \
-            --set-secrets JWT_SECRET=paxi-jwt-secret:latest
-      - uses: actions/github-script@v7
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
         with:
-          script: |
-            const date = new Date().toISOString().split('T')[0].replace(/-/g,'');
-            const sha  = context.sha.substring(0,7);
-            await github.rest.git.createRef({
-              owner: context.repo.owner, repo: context.repo.repo,
-              ref: `refs/tags/release-${date}-${sha}`, sha: context.sha
-            });
+          service: paxi-api
+          region: ${{ secrets.CLOUD_RUN_REGION }}
+          image: ${{ env.IMAGE }}:${{ needs.build.outputs.image-tag }}
+
+      - name: Show production URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.url }}"
