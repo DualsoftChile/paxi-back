@@ -96,6 +96,9 @@ jobs:
         id: meta
         run: echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
 
+      - name: Pull cache image if exists
+        run: docker pull $IMAGE:latest || true
+
       - name: Build image
         run: |
           docker build \
