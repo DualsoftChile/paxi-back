@@ -20,6 +20,11 @@ export class UfService {
   ) {}
 
   async getCurrentValue(): Promise<number> {
+    // Si Redis está deshabilitado, siempre traer valor fresco
+    if (!this.redis.isRedisEnabled()) {
+      return this.refresh();
+    }
+
     // Intentar desde caché primero
     const cached = await this.redis.get(UF_CACHE_KEY);
     if (cached) return parseFloat(cached);

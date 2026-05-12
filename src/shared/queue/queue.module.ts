@@ -1,5 +1,5 @@
 import { BullModule } from '@nestjs/bull';
-import { Module } from '@nestjs/common';
+import { Module, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 // Nombres de las queues — exportar para usar en otros módulos
@@ -12,13 +12,28 @@ export const QUEUE_FUEL_REFRESH = 'fuel-refresh';
   imports: [
     BullModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        redis: config.get<string>('REDIS_URL'),
-        defaultJobOptions: {
-          removeOnComplete: 100, // mantener los últimos 100 jobs completados
-          removeOnFail: 200, // mantener los últimos 200 jobs fallidos para debug
-        },
-      }),
+      useFactory: (config: ConfigService) => {
+        const enableRedis = config.get<string>('ENABLE_REDIS');
+        const redisUrl = config.get<string>('REDIS_URL');
+        const isEnabled = enableRedis === 'true' && redisUrl;
+
+        if (!isEnabled) {
+          Logger.warn(
+            '⚠️ BullMQ queues DESHABILITADAS (ENABLE_REDIS=false o REDIS_URL no configurado)',
+            'QueueModule',
+          );
+          // Retornar configuración vacía si Redis no está habilitado
+          return { redis: '' };
+        }
+
+        return {
+          redis: redisUrl,
+          defaultJobOptions: {
+            removeOnComplete: 100, // mantener los últimos 100 jobs completados
+            removeOnFail: 200, // mantener los últimos 200 jobs fallidos para debug
+          },
+        };
+      },
     }),
 
     BullModule.registerQueue(

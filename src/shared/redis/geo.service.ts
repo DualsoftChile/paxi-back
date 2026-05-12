@@ -24,7 +24,11 @@ export class GeoService {
     longitude: number,
     latitude: number,
   ): Promise<void> {
+    // Si Redis no está habilitado, operación no-op
+    if (!this.redis.isRedisEnabled()) return;
+
     const client = this.redis.getClient();
+    if (!client) return;
 
     // Actualizar posición en el GeoSet
     await client.geoadd(DRIVERS_GEO_KEY, longitude, latitude, driverId);
@@ -44,7 +48,11 @@ export class GeoService {
     radiusKm: number = 3,
     limit: number = 10,
   ): Promise<DriverLocation[]> {
+    // Si Redis no está habilitado, retornar array vacío
+    if (!this.redis.isRedisEnabled()) return [];
+
     const client = this.redis.getClient();
+    if (!client) return [];
 
     const results = (await client.georadius(
       DRIVERS_GEO_KEY,
@@ -69,7 +77,12 @@ export class GeoService {
 
   // Eliminar conductor del mapa (desconexión)
   async removeDriver(driverId: string): Promise<void> {
+    // Si Redis no está habilitado, operación no-op
+    if (!this.redis.isRedisEnabled()) return;
+
     const client = this.redis.getClient();
+    if (!client) return;
+
     await client.zrem(DRIVERS_GEO_KEY, driverId);
     await this.redis.del(`driver:status:${driverId}`);
   }
